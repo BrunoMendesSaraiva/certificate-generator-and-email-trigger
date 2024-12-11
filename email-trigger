@@ -1,0 +1,108 @@
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
+import pandas as pd
+import os
+
+# Configurações do Gmail
+EMAIL = "Test@gmail.com"  # Substitua pelo seu e-mail
+SENHA = "pin"  # Substitua pela senha de app gerada no Google
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587  # Porta para TLS
+
+# Configuração de teste
+MODO_TESTE = False  # Altere para False para enviar para os destinatários reais
+EMAIL_TESTE = "Test@gmail.com"  # E-mail para teste
+
+# Caminhos dos arquivos
+arquivo_lista = "arquivo_palestrantes.xlsx"  # Planilha com nomes e temas das palestras
+pasta_certificados = "arquivo_certificados_palestrantes"  # Pasta com os certificados gerados
+
+# Ler a lista de palestrantes
+lista = pd.read_excel(arquivo_lista)
+lista.columns = lista.columns.str.strip()  # Remover espaços dos nomes das colunas
+
+# Verificar se as colunas necessárias estão presentes
+if 'Nome' not in lista.columns or 'E-mail' not in lista.columns:
+    raise KeyError("As colunas 'Nome' e/ou 'E-mail' não foram encontradas na planilha.")
+
+# Função para sanitizar nomes (remover caracteres especiais)
+def sanitizar_nome(nome):
+    import re
+    nome_sanitizado = re.sub(r'[<>:"/\\|?*]', '_', nome)  # Substituir caracteres inválidos por "_"
+    return nome_sanitizado.strip()
+
+# Função para enviar e-mails com o certificado em PDF
+def enviar_email_com_certificado(nome, email, certificado_pdf_path):
+    destinatario = EMAIL_TESTE if MODO_TESTE else email  # Enviar para o e-mail de teste, se ativado
+    
+    # Criar a mensagem
+    mensagem = MIMEMultipart()
+    mensagem['From'] = EMAIL
+    mensagem['To'] = destinatario
+    mensagem['Subject'] = "Certificado de Palestra (Teste)" if MODO_TESTE else "Certificado de Palestra"
+
+    corpo = f"""
+    Prezado(a) {nome},
+
+    Prezado(a)  <nome>
+
+    Agradecemos pela sua participação no 14º Ciclo de Estudos do Programa de Pós-Graduação em Saúde Mental da Faculdade de Medicina de Ribeirão Preto (FMRP-USP).
+
+    Segue em anexo o certificado referente à sua participação como palestrante.
+
+    Atenciosamente,
+
+    Comissão Organizadora
+    """
+    mensagem.attach(MIMEText(corpo, 'plain'))
+
+    # Verificar se o arquivo PDF existe
+    if not os.path.exists(certificado_pdf_path):
+        print(f"⚠️ Certificado PDF não encontrado para {nome} ({certificado_pdf_path}). Pulando envio...")
+        return
+
+    # Anexar o certificado PDF
+    try:
+        print(f"Tentando anexar o arquivo: {certificado_pdf_path}")
+        with open(certificado_pdf_path, "rb") as anexo:
+            parte = MIMEBase('application', 'octet-stream')
+            parte.set_payload(anexo.read())  # Ler o conteúdo do arquivo
+            encoders.encode_base64(parte)  # Codificar o conteúdo para envio
+            parte.add_header(
+                'Content-Disposition',
+                f'attachment; filename="{os.path.basename(certificado_pdf_path)}"'
+            )
+            mensagem.attach(parte)
+        print(f"Arquivo anexado com sucesso: {certificado_pdf_path}")
+    except Exception as e:
+        print(f"Erro ao anexar o certificado para {nome}: {e}")
+        return
+
+    # Enviar o e-mail
+    try:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(EMAIL, SENHA)
+            server.send_message(mensagem)
+            print(f"E-mail enviado com sucesso para {nome} ({destinatario})")
+    except Exception as e:
+        print(f"Erro ao enviar e-mail para {nome}: {e}")
+
+# Enviar certificados por e-mail
+for _, linha in lista.iterrows():
+    nome = linha['Nome'].strip()
+    email = linha['E-mail'].strip()
+
+    # Remover acentos e sanitizar nome para localizar o arquivo
+    nome_sanitizado = sanitizar_nome(remover_acentos(nome))
+    certificado_pdf_path = os.path.join(pasta_certificados, f"Certificado_{nome_sanitizado}.pdf")
+
+    # Verificar se o arquivo existe antes de tentar enviá-lo
+    if not os.path.exists(certificado_pdf_path):
+        print(f"⚠️ Certificado não encontrado para {nome}. Pulando...")
+        continue
+
+    enviar_email_com_certificado(nome, email, certificado_pdf_path)
