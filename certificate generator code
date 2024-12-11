@@ -6,8 +6,8 @@ import subprocess
 import shutil
 
 # Caminhos dos arquivos
-arquivo_lista = "palestrantes.xlsx"  # Planilha com nomes e temas das palestras
-modelo_certificado = "Certificado palestrante.pptx"  # Modelo do certificado
+arquivo_lista = "arquivo_palestrantes.xlsx"  # Planilha com nomes e temas das palestras
+modelo_certificado = "arquivo_Certificado palestrante.pptx"  # Modelo do certificado
 pasta_certificados = "certificados_palestrantes"  # Pasta para salvar os certificados gerados
 pasta_certificados_drive = "/content/drive/My Drive/certificados_palestrantes"  # Caminho para salvar no Google Drive
 
