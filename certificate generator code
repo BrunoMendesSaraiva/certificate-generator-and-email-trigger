@@ -1,0 +1,83 @@
+import os
+import unicodedata
+from pptx import Presentation
+import pandas as pd
+import subprocess
+import shutil
+
+# Caminhos dos arquivos
+arquivo_lista = "palestrantes.xlsx"  # Planilha com nomes e temas das palestras
+modelo_certificado = "Certificado palestrante.pptx"  # Modelo do certificado
+pasta_certificados = "certificados_palestrantes"  # Pasta para salvar os certificados gerados
+pasta_certificados_drive = "/content/drive/My Drive/certificados_palestrantes"  # Caminho para salvar no Google Drive
+
+# Criar a pasta de certificados, se não existir
+if not os.path.exists(pasta_certificados):
+    os.makedirs(pasta_certificados)
+
+# Função para remover acentos e normalizar strings
+def remover_acentos(texto):
+    return ''.join(
+        c for c in unicodedata.normalize('NFKD', texto)
+        if not unicodedata.combining(c)
+    )
+
+# Função para sanitizar nomes (remover caracteres especiais)
+def sanitizar_nome(nome):
+    import re
+    nome_sanitizado = re.sub(r'[<>:"/\\|?*]', '_', nome)  # Substituir caracteres inválidos por "_"
+    return nome_sanitizado.strip()
+
+# Função para converter PPTX para PDF usando LibreOffice
+def converter_para_pdf(pptx_path, pdf_path):
+    try:
+        subprocess.run(["libreoffice", "--headless", "--convert-to", "pdf", pptx_path, "--outdir", os.path.dirname(pdf_path)])
+        print(f"Convertido para PDF: {pdf_path}")
+    except Exception as e:
+        print(f"Erro ao converter para PDF: {e}")
+
+# Ler a lista de palestrantes
+lista = pd.read_excel(arquivo_lista)
+lista.columns = lista.columns.str.strip()  # Remover espaços dos nomes das colunas
+
+# Verificar se as colunas necessárias estão presentes
+if 'Nome' not in lista.columns or 'Palestra' not in lista.columns:
+    raise KeyError("As colunas 'Nome' e/ou 'Palestra' não foram encontradas na planilha.")
+
+# Gerar certificados personalizados
+for _, linha in lista.iterrows():
+    nome_original = linha['Nome'].strip()  # Nome com acentos
+    palestra = linha['Palestra'].strip()  # Nome da palestra com acentos
+    nome_sanitizado = sanitizar_nome(remover_acentos(nome_original))  # Nome sem acentos e sanitizado
+
+    # Caminhos dos arquivos
+    certificado_pptx_path = os.path.join(pasta_certificados, f"Certificado_{nome_sanitizado}.pptx")
+    certificado_pdf_path = os.path.join(pasta_certificados, f"Certificado_{nome_sanitizado}.pdf")
+
+    # Criar o certificado no PowerPoint
+    prs = Presentation(modelo_certificado)
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                text = shape.text
+                # Usar o nome original com acentos no conteúdo do certificado
+                text = text.replace("<nome>", nome_original)
+                text = text.replace("<nome da palestra>", palestra)
+                shape.text = text
+
+    # Salvar o certificado como PPTX
+    prs.save(certificado_pptx_path)
+    print(f"Certificado PPTX gerado para {nome_original} ({certificado_pptx_path})")
+
+    # Converter para PDF
+    try:
+        converter_para_pdf(certificado_pptx_path, certificado_pdf_path)
+    except Exception as e:
+        print(f"Erro ao converter para PDF para {nome_original}: {e}")
+
+# Copiar a pasta para o Google Drive
+if os.path.exists(pasta_certificados):
+    shutil.copytree(pasta_certificados, pasta_certificados_drive, dirs_exist_ok=True)
+    print(f"Pasta de certificados copiada para o Google Drive: {pasta_certificados_drive}")
+else:
+    print("A pasta de certificados não foi encontrada!")
